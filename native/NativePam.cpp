@@ -1,5 +1,4 @@
 #include <string.h>
-#include <iostream>
 #include "com_blueprintit_security_pam_Pam.h"
 #include "pamcalls.cpp"
 
@@ -17,9 +16,6 @@ int handlecount=0;
 
 struct native_data *create_data(JNIEnv *env, jobject obj)
 {
-	cout << "Allocating data\n";
-	cout.flush();
-
 	struct native_data *data = new (struct native_data);
 	data->pamhandle=NULL;
 
@@ -59,9 +55,6 @@ struct native_data *get_data(JNIEnv *env, jobject obj)
 
 void release_data(struct native_data *data)
 {
-	cout << "Releasing data\n";
-	cout.flush();
-
 	jmethodID methSetData = data->env->GetMethodID(data->env->GetObjectClass(data->Pam),"setNativeData","([B)V");
 	data->env->CallVoidMethod(data->Pam,methSetData,NULL);
 
@@ -97,6 +90,9 @@ static int pam_converser(int num_msg, const struct pam_message **msg, struct pam
 	jmethodID methCallback = env->GetMethodID(clsCallback,"callback","([Lcom/blueprintit/security/pam/PamMessage;)[Lcom/blueprintit/security/pam/PamResponse;");
 	jobjectArray jaryResponse = (jobjectArray)env->CallObjectMethod(data->callback,methCallback,jaryMessage);
 	
+	if (jaryResponse==NULL)
+		return PAM_CONV_ERR;
+
 	jclass clsPamResponse = env->FindClass("com/blueprintit/security/pam/PamResponse");
 	jmethodID methGetResponse = env->GetMethodID(clsPamResponse,"getResponse","()Ljava/lang/String;");
 	jmethodID methGetResponseCode = env->GetMethodID(clsPamResponse,"getResponseCode","()I");
@@ -169,8 +165,6 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1start
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1end
   (JNIEnv *env, jobject obj, jint pam_status)
 {
-	cout << "Proper call to pam_end\n";
-	cout.flush();
 	struct native_data *data = get_data(env,obj);
 	int status = call_pam_end(data->pamhandle,pam_status);
 	data->pamhandle=NULL;
