@@ -16,7 +16,6 @@ public class PamAuthenticate implements PamCallback
 
 	public PamResponse[] callback(PamMessage[] messages)
 	{
-		System.out.println("callback called");
 		PamResponse[] results = new PamResponse[messages.length];
 		for (int loop=0; loop<messages.length; loop++)
 		{
