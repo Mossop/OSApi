@@ -1,58 +1,92 @@
 #include <string.h>
-#include <map>
 #include "com_blueprintit_security_pam_Pam.h"
 #include "pamcalls.cpp"
 
 using namespace std;
 
-map<int, pam_handle_t*> handles;
-
-extern "C" jint JNI_OnLoad(JavaVM *vm, void *reserved)
+struct native_data
 {
-	open_pam();
-	return JNI_VERSION_1_4;
-}
-
-extern "C" void JNI_OnUnload(JavaVM *vm, void *reserved)
-{
-	close_pam();
-}
-
-int find_id(JNIEnv *env, jobject obj)
-{
-	jclass clsPam = env->GetObjectClass(obj);
-	jmethodID methGetID = env->GetMethodID(clsPam,"getID","()I");
-	return env->CallIntMethod(obj,methGetID);
-}
-
-pam_handle_t* fetch_handle(JNIEnv *env, jobject obj)
-{
-	int id = find_id(env,obj);
-	pam_handle_t* handle = handles[id];
-	return handle;
-}
-
-void set_handle(JNIEnv *env, jobject obj, pam_handle_t *handle)
-{
-	int id = find_id(env,obj);
-	handles.insert(make_pair(id,handle));
-}
-
-void clear_handle(JNIEnv *env, jobject obj)
-{
-	int id = find_id(env,obj);
-	handles.erase(id);
-}
-
-struct pam_data
-{
-	jobject callback;
+	jobject Pam;
 	JNIEnv *env;
+	jobject callback;
+	pam_handle_t *pamhandle;
+	struct native_data *next;
+	struct native_data *prev;
 };
+
+struct native_data *first = NULL;
+
+struct native_data *create_data(JNIEnv *env, jobject obj)
+{
+	struct native_data *data = new (struct native_data);
+	data->pamhandle=NULL;
+
+	data->env=env;
+	data->Pam=env->NewGlobalRef(obj);
+
+	data->next=first;
+	data->prev=NULL;
+
+	if (first!=NULL)
+		first->prev=data;
+	first=data;
+
+	jmethodID methSetData = env->GetMethodID(env->GetObjectClass(obj),"setNativeData","([B)V");
+	jbyteArray jaryData = env->NewByteArray(sizeof data);
+	jboolean iscopy;
+	jbyte *pinned = env->GetByteArrayElements(jaryData,&iscopy);
+
+	*((struct native_data**)pinned)=data;
+
+	env->ReleaseByteArrayElements(jaryData,pinned,0);
+
+	env->CallVoidMethod(obj,methSetData,jaryData);
+
+	return data;
+}
+
+struct native_data *get_data(JNIEnv *env, jobject obj)
+{
+	jmethodID methGetData = env->GetMethodID(env->GetObjectClass(obj),"getNativeData","()[B");
+	jbyteArray jaryData = (jbyteArray)env->CallObjectMethod(obj,methGetData);
+	jboolean iscopy;
+	jbyte *pinned = env->GetByteArrayElements(jaryData,&iscopy);
+
+	struct native_data *data = *((struct native_data**)pinned);
+
+	env->ReleaseByteArrayElements(jaryData,pinned,0);
+
+	return data;
+}
+
+void release_data(struct native_data *data)
+{
+	if (data->next!=NULL)
+		data->next->prev=data->prev;
+	if (data->prev!=NULL)
+		data->prev->next=data->next;
+	if (data==first)
+		first=data->next;
+
+	if (data->pamhandle!=NULL)
+	{
+		call_pam_end(data->pamhandle,0);
+		data->pamhandle=NULL;
+	}
+
+	jmethodID methSetData = data->env->GetMethodID(data->env->GetObjectClass(data->Pam),"setNativeData","([B)V");
+	data->env->CallVoidMethod(data->Pam,methSetData,NULL);
+
+	data->env->DeleteGlobalRef(data->Pam);
+	data->Pam=NULL;
+	data->env=NULL;
+
+	delete data;
+}
 
 static int pam_converser(int num_msg, const struct pam_message **msg, struct pam_response **resp, void *appdata_ptr)
 {
-	struct pam_data *data = (struct pam_data*)appdata_ptr;
+	struct native_data *data = (struct native_data*)appdata_ptr;
 	JNIEnv *env = data->env;
 
 	jclass clsPamMessage = env->FindClass("com/blueprintit/security/pam/PamMessage");
@@ -98,23 +132,34 @@ static int pam_converser(int num_msg, const struct pam_message **msg, struct pam
 	return PAM_SUCCESS;
 }
 
+extern "C" jint JNI_OnLoad(JavaVM *vm, void *reserved)
+{
+	open_pam();
+	return JNI_VERSION_1_4;
+}
+
+extern "C" void JNI_OnUnload(JavaVM *vm, void *reserved)
+{
+	while (first!=NULL)
+		release_data(first);
+	close_pam();
+}
+
 /*
  * Class:     com_blueprintit_security_pam_Pam
  * Method:    call_pam_start
- * Signature: (Ljava/lang/String;Ljava/lang/String;Lcom/blueprintit/security/pam/PamCallback;I)I
+ * Signature: (Ljava/lang/String;Ljava/lang/String;Lcom/blueprintit/security/pam/PamCallback;)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1start
   (JNIEnv *env, jobject obj, jstring service, jstring user, jobject callback)
 {
+	struct native_data *data = create_data(env,obj);
+
 	const char *pam_serv = env->GetStringUTFChars(service,0);
 	const char *pam_user = env->GetStringUTFChars(user,0);
 
 	pam_handle_t *handle;
-	jobject globalref = env->NewGlobalRef(callback);
-
-	struct pam_data *data = new struct pam_data;
-	data->callback=globalref;
-	data->env=env;
+	data->callback = env->NewGlobalRef(callback);
 
 	struct pam_conv *conv = new struct pam_conv;
 	conv->conv=&pam_converser;
@@ -123,7 +168,11 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1start
 	int status = call_pam_start(strdup(pam_serv),strdup(pam_user),conv,&handle);
 	if (status==PAM_SUCCESS)
 	{
-		set_handle(env,obj,handle);
+		data->pamhandle=handle;
+	}
+	else
+	{
+		release_data(data);
 	}
 
 	env->ReleaseStringUTFChars(service,pam_serv);
@@ -135,98 +184,106 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1start
 /*
  * Class:     com_blueprintit_security_pam_Pam
  * Method:    call_pam_end
- * Signature: (II)I
+ * Signature: (I)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1end
   (JNIEnv *env, jobject obj, jint pam_status)
 {
-	pam_handle_t *handle = fetch_handle(env,obj);
-	int status = call_pam_end(handle,pam_status);
-	clear_handle(env,obj);
+	struct native_data *data = get_data(env,obj);
+	int status = call_pam_end(data->pamhandle,pam_status);
+	data->pamhandle=NULL;
+	release_data(data);
 	return status;
 }
 
 /*
  * Class:     com_blueprintit_security_pam_Pam
  * Method:    call_pam_authenticate
- * Signature: (II)I
+ * Signature: (I)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1authenticate
   (JNIEnv *env, jobject obj, jint flags)
 {
-	pam_handle_t *handle = fetch_handle(env,obj);
+	struct native_data *data = get_data(env,obj);
+	pam_handle_t *handle = data->pamhandle;
 	return call_pam_authenticate(handle,flags);
 }
 
 /*
  * Class:     com_blueprintit_security_pam_Pam
  * Method:    call_pam_setcred
- * Signature: (II)I
+ * Signature: (I)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1setcred
   (JNIEnv *env, jobject obj, jint flags)
 {
-	pam_handle_t *handle = fetch_handle(env,obj);
+	struct native_data *data = get_data(env,obj);
+	pam_handle_t *handle = data->pamhandle;
 	return call_pam_setcred(handle,flags);
 }
 
 /*
  * Class:     com_blueprintit_security_pam_Pam
  * Method:    call_pam_acct_mgmt
- * Signature: (II)I
+ * Signature: (I)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1acct_1mgmt
   (JNIEnv *env, jobject obj, jint flags)
 {
-	pam_handle_t *handle = fetch_handle(env,obj);
+	struct native_data *data = get_data(env,obj);
+	pam_handle_t *handle = data->pamhandle;
 	return call_pam_acct_mgmt(handle,flags);
 }
 
 /*
  * Class:     com_blueprintit_security_pam_Pam
  * Method:    call_pam_open_session
- * Signature: (II)I
+ * Signature: (I)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1open_1session
   (JNIEnv *env, jobject obj, jint flags)
 {
-	pam_handle_t *handle = fetch_handle(env,obj);
+	struct native_data *data = get_data(env,obj);
+	pam_handle_t *handle = data->pamhandle;
 	return call_pam_open_session(handle,flags);
 }
 
 /*
  * Class:     com_blueprintit_security_pam_Pam
  * Method:    call_pam_close_session
- * Signature: (II)I
+ * Signature: (I)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1close_1session
   (JNIEnv *env, jobject obj, jint flags)
 {
-	pam_handle_t *handle = fetch_handle(env,obj);
+	struct native_data *data = get_data(env,obj);
+	pam_handle_t *handle = data->pamhandle;
 	return call_pam_close_session(handle,flags);
 }
 
 /*
  * Class:     com_blueprintit_security_pam_Pam
  * Method:    call_pam_chauthtok
- * Signature: (II)I
+ * Signature: (I)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1chauthtok
   (JNIEnv *env, jobject obj, jint flags)
 {
-	pam_handle_t *handle = fetch_handle(env,obj);
+	struct native_data *data = get_data(env,obj);
+	pam_handle_t *handle = data->pamhandle;
 	return call_pam_chauthtok(handle,flags);
 }
 
 /*
  * Class:     com_blueprintit_security_pam_Pam
  * Method:    call_pam_strerror
- * Signature: (II)Ljava/lang/String;
+ * Signature: (I)Ljava/lang/String;
  */
 JNIEXPORT jstring JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1strerror
   (JNIEnv *env, jobject obj, jint errnum)
 {
-	pam_handle_t *handle = fetch_handle(env,obj);
+	struct native_data *data = get_data(env,obj);
+	pam_handle_t *handle = data->pamhandle;
 	const char *error = call_pam_strerror(handle,errnum);
 	return env->NewStringUTF(error);
 }
