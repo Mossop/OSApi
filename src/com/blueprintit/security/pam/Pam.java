@@ -142,6 +142,12 @@ public class Pam
 		return myid;
 	}
 	
+	public void finalize() throws Throwable
+	{
+		if (valid)
+			pam_end(getStatus());
+	}
+	
 	private native int call_pam_start(String service, String user, PamCallback callback);
 	private native int call_pam_end(int pam_status);
 	private native int call_pam_authenticate(int flags);
