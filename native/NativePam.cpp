@@ -1,4 +1,5 @@
 #include <string.h>
+#include <iostream>
 #include "com_blueprintit_security_pam_Pam.h"
 #include "pamcalls.cpp"
 
@@ -10,37 +11,35 @@ struct native_data
 	JNIEnv *env;
 	jobject callback;
 	pam_handle_t *pamhandle;
-	struct native_data *next;
-	struct native_data *prev;
 };
 
-struct native_data *first = NULL;
+int handlecount=0;
 
 struct native_data *create_data(JNIEnv *env, jobject obj)
 {
+	cout << "Allocating data\n";
+	cout.flush();
+
 	struct native_data *data = new (struct native_data);
 	data->pamhandle=NULL;
 
 	data->env=env;
 	data->Pam=env->NewGlobalRef(obj);
 
-	data->next=first;
-	data->prev=NULL;
-
-	if (first!=NULL)
-		first->prev=data;
-	first=data;
-
 	jmethodID methSetData = env->GetMethodID(env->GetObjectClass(obj),"setNativeData","([B)V");
 	jbyteArray jaryData = env->NewByteArray(sizeof data);
-	jboolean iscopy;
-	jbyte *pinned = env->GetByteArrayElements(jaryData,&iscopy);
+	jbyte *pinned = env->GetByteArrayElements(jaryData,NULL);
 
 	*((struct native_data**)pinned)=data;
 
 	env->ReleaseByteArrayElements(jaryData,pinned,0);
 
 	env->CallVoidMethod(obj,methSetData,jaryData);
+
+	if (handlecount==0)
+		open_pam();
+
+	handlecount++;
 
 	return data;
 }
@@ -49,8 +48,7 @@ struct native_data *get_data(JNIEnv *env, jobject obj)
 {
 	jmethodID methGetData = env->GetMethodID(env->GetObjectClass(obj),"getNativeData","()[B");
 	jbyteArray jaryData = (jbyteArray)env->CallObjectMethod(obj,methGetData);
-	jboolean iscopy;
-	jbyte *pinned = env->GetByteArrayElements(jaryData,&iscopy);
+	jbyte *pinned = env->GetByteArrayElements(jaryData,NULL);
 
 	struct native_data *data = *((struct native_data**)pinned);
 
@@ -61,18 +59,8 @@ struct native_data *get_data(JNIEnv *env, jobject obj)
 
 void release_data(struct native_data *data)
 {
-	if (data->next!=NULL)
-		data->next->prev=data->prev;
-	if (data->prev!=NULL)
-		data->prev->next=data->next;
-	if (data==first)
-		first=data->next;
-
-	if (data->pamhandle!=NULL)
-	{
-		call_pam_end(data->pamhandle,0);
-		data->pamhandle=NULL;
-	}
+	cout << "Releasing data\n";
+	cout.flush();
 
 	jmethodID methSetData = data->env->GetMethodID(data->env->GetObjectClass(data->Pam),"setNativeData","([B)V");
 	data->env->CallVoidMethod(data->Pam,methSetData,NULL);
@@ -82,6 +70,11 @@ void release_data(struct native_data *data)
 	data->env=NULL;
 
 	delete data;
+
+	handlecount--;
+
+	if (handlecount==0)
+		close_pam();
 }
 
 static int pam_converser(int num_msg, const struct pam_message **msg, struct pam_response **resp, void *appdata_ptr)
@@ -122,7 +115,7 @@ static int pam_converser(int num_msg, const struct pam_message **msg, struct pam
 		jobject objResponse = env->GetObjectArrayElement(jaryResponse,i);
 		resps[i].resp_retcode = env->CallIntMethod(objResponse,methGetResponseCode);
 		jstring jstrResp = (jstring)env->CallObjectMethod(objResponse,methGetResponse);
-		const char *string = env->GetStringUTFChars(jstrResp,0);
+		const char *string = env->GetStringUTFChars(jstrResp,NULL);
 		resps[i].resp = strdup(string);
 		env->ReleaseStringUTFChars(jstrResp,string);
 	}
@@ -130,19 +123,6 @@ static int pam_converser(int num_msg, const struct pam_message **msg, struct pam
 	*resp = resps;
 
 	return PAM_SUCCESS;
-}
-
-extern "C" jint JNI_OnLoad(JavaVM *vm, void *reserved)
-{
-	open_pam();
-	return JNI_VERSION_1_4;
-}
-
-extern "C" void JNI_OnUnload(JavaVM *vm, void *reserved)
-{
-	while (first!=NULL)
-		release_data(first);
-	close_pam();
 }
 
 /*
@@ -155,8 +135,8 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1start
 {
 	struct native_data *data = create_data(env,obj);
 
-	const char *pam_serv = env->GetStringUTFChars(service,0);
-	const char *pam_user = env->GetStringUTFChars(user,0);
+	const char *pam_serv = env->GetStringUTFChars(service,NULL);
+	const char *pam_user = env->GetStringUTFChars(user,NULL);
 
 	pam_handle_t *handle;
 	data->callback = env->NewGlobalRef(callback);
@@ -189,6 +169,8 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1start
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1end
   (JNIEnv *env, jobject obj, jint pam_status)
 {
+	cout << "Proper call to pam_end\n";
+	cout.flush();
 	struct native_data *data = get_data(env,obj);
 	int status = call_pam_end(data->pamhandle,pam_status);
 	data->pamhandle=NULL;
