@@ -6,10 +6,17 @@ package com.blueprintit.security.pam;
 public class PamResponse
 {
 	private String response;
+	private int code;
+	
+	public PamResponse(String message, int code)
+	{
+		this.code=code;
+		this.response=message;
+	}
 	
 	public PamResponse(String message)
 	{
-		response=message;
+		this(message,0);
 	}
 	
 	public String getResponse()
@@ -19,6 +26,6 @@ public class PamResponse
 	
 	public int getResponseCode()
 	{
-		return 0;
+		return code;
 	}
 }
