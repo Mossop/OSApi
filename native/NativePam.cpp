@@ -18,19 +18,29 @@ extern "C" void JNI_OnUnload(JavaVM *vm, void *reserved)
 	close_pam();
 }
 
-pam_handle_t* fetch_handle(int id)
+int find_id(JNIEnv *env, jobject obj)
 {
+	jclass clsPam = env->GetObjectClass(obj);
+	jmethodID methGetID = env->GetMethodID(clsPam,"getID","()I");
+	return env->CallIntMethod(obj,methGetID);
+}
+
+pam_handle_t* fetch_handle(JNIEnv *env, jobject obj)
+{
+	int id = find_id(env,obj);
 	pam_handle_t* handle = handles[id];
 	return handle;
 }
 
-void set_handle(int id, pam_handle_t *handle)
+void set_handle(JNIEnv *env, jobject obj, pam_handle_t *handle)
 {
+	int id = find_id(env,obj);
 	handles.insert(make_pair(id,handle));
 }
 
-void clear_handle(int id)
+void clear_handle(JNIEnv *env, jobject obj)
 {
+	int id = find_id(env,obj);
 	handles.erase(id);
 }
 
@@ -94,7 +104,7 @@ static int pam_converser(int num_msg, const struct pam_message **msg, struct pam
  * Signature: (Ljava/lang/String;Ljava/lang/String;Lcom/blueprintit/security/pam/PamCallback;I)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1start
-  (JNIEnv *env, jobject obj, jstring service, jstring user, jobject callback, jint id)
+  (JNIEnv *env, jobject obj, jstring service, jstring user, jobject callback)
 {
 	const char *pam_serv = env->GetStringUTFChars(service,0);
 	const char *pam_user = env->GetStringUTFChars(user,0);
@@ -113,7 +123,7 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1start
 	int status = call_pam_start(strdup(pam_serv),strdup(pam_user),conv,&handle);
 	if (status==PAM_SUCCESS)
 	{
-		set_handle(id,handle);
+		set_handle(env,obj,handle);
 	}
 
 	env->ReleaseStringUTFChars(service,pam_serv);
@@ -128,11 +138,11 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1start
  * Signature: (II)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1end
-  (JNIEnv *env, jobject obj, jint id, jint pam_status)
+  (JNIEnv *env, jobject obj, jint pam_status)
 {
-	pam_handle_t *handle = fetch_handle(id);
+	pam_handle_t *handle = fetch_handle(env,obj);
 	int status = call_pam_end(handle,pam_status);
-	clear_handle(id);
+	clear_handle(env,obj);
 	return status;
 }
 
@@ -142,9 +152,9 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1end
  * Signature: (II)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1authenticate
-  (JNIEnv *env, jobject obj, jint id, jint flags)
+  (JNIEnv *env, jobject obj, jint flags)
 {
-	pam_handle_t *handle = fetch_handle(id);
+	pam_handle_t *handle = fetch_handle(env,obj);
 	return call_pam_authenticate(handle,flags);
 }
 
@@ -154,9 +164,9 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1authenti
  * Signature: (II)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1setcred
-  (JNIEnv *env, jobject obj, jint id, jint flags)
+  (JNIEnv *env, jobject obj, jint flags)
 {
-	pam_handle_t *handle = fetch_handle(id);
+	pam_handle_t *handle = fetch_handle(env,obj);
 	return call_pam_setcred(handle,flags);
 }
 
@@ -166,9 +176,9 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1setcred
  * Signature: (II)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1acct_1mgmt
-  (JNIEnv *env, jobject obj, jint id, jint flags)
+  (JNIEnv *env, jobject obj, jint flags)
 {
-	pam_handle_t *handle = fetch_handle(id);
+	pam_handle_t *handle = fetch_handle(env,obj);
 	return call_pam_acct_mgmt(handle,flags);
 }
 
@@ -178,9 +188,9 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1acct_1mg
  * Signature: (II)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1open_1session
-  (JNIEnv *env, jobject obj, jint id, jint flags)
+  (JNIEnv *env, jobject obj, jint flags)
 {
-	pam_handle_t *handle = fetch_handle(id);
+	pam_handle_t *handle = fetch_handle(env,obj);
 	return call_pam_open_session(handle,flags);
 }
 
@@ -190,9 +200,9 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1open_1se
  * Signature: (II)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1close_1session
-  (JNIEnv *env, jobject obj, jint id, jint flags)
+  (JNIEnv *env, jobject obj, jint flags)
 {
-	pam_handle_t *handle = fetch_handle(id);
+	pam_handle_t *handle = fetch_handle(env,obj);
 	return call_pam_close_session(handle,flags);
 }
 
@@ -202,9 +212,9 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1close_1s
  * Signature: (II)I
  */
 JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1chauthtok
-  (JNIEnv *env, jobject obj, jint id, jint flags)
+  (JNIEnv *env, jobject obj, jint flags)
 {
-	pam_handle_t *handle = fetch_handle(id);
+	pam_handle_t *handle = fetch_handle(env,obj);
 	return call_pam_chauthtok(handle,flags);
 }
 
@@ -214,9 +224,9 @@ JNIEXPORT jint JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1chauthto
  * Signature: (II)Ljava/lang/String;
  */
 JNIEXPORT jstring JNICALL Java_com_blueprintit_security_pam_Pam_call_1pam_1strerror
-  (JNIEnv *env, jobject obj, jint id, jint errnum)
+  (JNIEnv *env, jobject obj, jint errnum)
 {
-	pam_handle_t *handle = fetch_handle(id);
+	pam_handle_t *handle = fetch_handle(env,obj);
 	const char *error = call_pam_strerror(handle,errnum);
 	return env->NewStringUTF(error);
 }

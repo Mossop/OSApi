@@ -122,28 +122,35 @@ public class Pam
 	private int myid;
 	private PamCallback callback;
 	private int status;
+	private boolean valid = false;
 	
 	public Pam(String service, String user, PamCallback callback)
 	{
 		myid = uid;
 		uid++;
 		this.callback=callback;
-		status=call_pam_start(service,user,callback,myid);
+		status=call_pam_start(service,user,callback);
 		if (status!=PAM_SUCCESS)
 		{
 			throw new RuntimeException("Unable to initialise pam");
 		}
+		valid=true;
 	}
 	
-	private native int call_pam_start(String service, String user, PamCallback callback, int id);
-	private native int call_pam_end(int id, int pam_status);
-	private native int call_pam_authenticate(int id, int flags);
-	private native int call_pam_setcred(int id, int flags);
-	private native int call_pam_acct_mgmt(int id, int flags);
-	private native int call_pam_open_session(int id, int flags);
-	private native int call_pam_close_session(int id, int flags);
-	private native int call_pam_chauthtok(int id, int flags);
-	private native String call_pam_strerror(int id, int errnum);
+	private int getID()
+	{
+		return myid;
+	}
+	
+	private native int call_pam_start(String service, String user, PamCallback callback);
+	private native int call_pam_end(int pam_status);
+	private native int call_pam_authenticate(int flags);
+	private native int call_pam_setcred(int flags);
+	private native int call_pam_acct_mgmt(int flags);
+	private native int call_pam_open_session(int flags);
+	private native int call_pam_close_session(int flags);
+	private native int call_pam_chauthtok(int flags);
+	private native String call_pam_strerror(int errnum);
 	
 	public int getStatus()
 	{
@@ -152,48 +159,65 @@ public class Pam
 	
 	public String getError()
 	{
-		return call_pam_strerror(myid,status);
+		if (!valid)
+			throw new IllegalStateException("pam_end has already been called");
+		return call_pam_strerror(status);
 	}
 	
 	public int pam_end(int pam_status)
 	{
-		status=call_pam_end(myid,pam_status);
+		if (!valid)
+			throw new IllegalStateException("pam_end has already been called");
+		status=call_pam_end(pam_status);
+		valid=false;
 		return status;
 	}
 	
 	public int pam_authenticate(int flags)
 	{
-		status=call_pam_authenticate(myid,flags);
+		if (!valid)
+			throw new IllegalStateException("pam_end has already been called");
+		status=call_pam_authenticate(flags);
 		return status;
 	}
 	
 	public int pam_setcred(int flags)
 	{
-		status=call_pam_setcred(myid,flags);
+		if (!valid)
+			throw new IllegalStateException("pam_end has already been called");
+		status=call_pam_setcred(flags);
 		return status;
 	}
 	
 	public int pam_acct_mgmt(int flags)
 	{
-		status=call_pam_acct_mgmt(myid,flags);
+		if (!valid)
+			throw new IllegalStateException("pam_end has already been called");
+		status=call_pam_acct_mgmt(flags);
 		return status;
 	}
 	
 	public int pam_open_session(int flags)
 	{
-		status=call_pam_open_session(myid,flags);
+		if (!valid)
+			throw new IllegalStateException("pam_end has already been called");
+		status=call_pam_open_session(flags);
 		return status;
 	}
 	
 	public int pam_close_session(int flags)
 	{
-		status=call_pam_close_session(myid,flags);
+		if (!valid)
+			throw new IllegalStateException("pam_end has already been called");
+		status=call_pam_close_session(flags);
 		return status;
 	}
 	
 	public int pam_chauthtok(int flags)
 	{
-		status=call_pam_chauthtok(myid,flags);
+		if (!valid)
+			throw new IllegalStateException("pam_end has already been called");
+		status=call_pam_chauthtok(flags);
 		return status;
 	}
 }
