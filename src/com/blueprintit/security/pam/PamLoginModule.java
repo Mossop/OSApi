@@ -12,11 +12,19 @@ import javax.security.auth.spi.LoginModule;
  */
 public class PamLoginModule implements LoginModule
 {
+	/* (non-Javadoc)
+	 * @see javax.security.auth.spi.LoginModule#initialize(javax.security.auth.Subject, javax.security.auth.callback.CallbackHandler, java.util.Map, java.util.Map)
+	 */
+	public void initialize(Subject arg0, CallbackHandler arg1, Map arg2, Map arg3)
+	{
+		// TODO Auto-generated method stub
+
+	}
 
 	/* (non-Javadoc)
-	 * @see javax.security.auth.spi.LoginModule#abort()
+	 * @see javax.security.auth.spi.LoginModule#login()
 	 */
-	public boolean abort() throws LoginException
+	public boolean login() throws LoginException
 	{
 		// TODO Auto-generated method stub
 		return false;
@@ -32,9 +40,9 @@ public class PamLoginModule implements LoginModule
 	}
 
 	/* (non-Javadoc)
-	 * @see javax.security.auth.spi.LoginModule#login()
+	 * @see javax.security.auth.spi.LoginModule#abort()
 	 */
-	public boolean login() throws LoginException
+	public boolean abort() throws LoginException
 	{
 		// TODO Auto-generated method stub
 		return false;
@@ -48,14 +56,4 @@ public class PamLoginModule implements LoginModule
 		// TODO Auto-generated method stub
 		return false;
 	}
-
-	/* (non-Javadoc)
-	 * @see javax.security.auth.spi.LoginModule#initialize(javax.security.auth.Subject, javax.security.auth.callback.CallbackHandler, java.util.Map, java.util.Map)
-	 */
-	public void initialize(Subject arg0, CallbackHandler arg1, Map arg2, Map arg3)
-	{
-		// TODO Auto-generated method stub
-
-	}
-
 }

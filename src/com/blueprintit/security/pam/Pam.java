@@ -3,7 +3,7 @@ package com.blueprintit.security.pam;
 /**
  * @author Dave
  */
-public class NativePam
+public class Pam
 {
 	/* ----------------- The Linux-PAM return values ------------------ */
 
@@ -123,7 +123,7 @@ public class NativePam
 	private PamCallback callback;
 	private int status;
 	
-	public NativePam(String service, String user, PamCallback callback)
+	public Pam(String service, String user, PamCallback callback)
 	{
 		myid = uid;
 		uid++;
