@@ -7,10 +7,10 @@ public class PamMessage
 {
 	/* Message styles */
 
-	public static int PAM_PROMPT_ECHO_OFF    = 1;
-	public static int PAM_PROMPT_ECHO_ON     = 2;
-	public static int PAM_ERROR_MSG          = 3;
-	public static int PAM_TEXT_INFO          = 4;
+	public static final int PAM_PROMPT_ECHO_OFF    = 1;
+	public static final int PAM_PROMPT_ECHO_ON     = 2;
+	public static final int PAM_ERROR_MSG          = 3;
+	public static final int PAM_TEXT_INFO          = 4;
 
 	private String message;
 	private int style;
