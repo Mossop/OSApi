@@ -5,15 +5,34 @@ package com.blueprintit.security.pam;
  */
 public class PamAuthenticate implements PamCallback
 {
+	private String username;
+	private String password;
+	
 	private PamAuthenticate(String user, String password)
 	{
-		
+		username=user;
+		this.password=password;
 	}
 
 	public PamResponse[] callback(PamMessage[] messages)
 	{
-		// TODO Auto-generated method stub
-		return null;
+		PamResponse[] results = new PamResponse[messages.length];
+		for (int loop=0; loop<messages.length; loop++)
+		{
+			if (messages[loop].getStyle()==PamMessage.PAM_PROMPT_ECHO_ON)
+			{
+				results[loop] = new PamResponse(username);
+			}
+			else if (messages[loop].getStyle()==PamMessage.PAM_PROMPT_ECHO_OFF)
+			{
+				results[loop] = new PamResponse(password);
+			}
+			else
+			{
+				results[loop] = new PamResponse("");
+			}
+		}
+		return results;
 	}
 	
 	public static boolean authenticate(String user, String password)
