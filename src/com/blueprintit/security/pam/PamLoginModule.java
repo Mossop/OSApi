@@ -95,6 +95,16 @@ public class PamLoginModule implements LoginModule, PamCallback
 		return false;
 	}
 
+	public String fetchUsername()
+	{
+		
+	}
+	
+	public String fetchPassword()
+	{
+		
+	}
+	
 	public PamResponse[] callback(PamMessage[] messages)
 	{
 		PamResponse[] results = new PamResponse[messages.length];
