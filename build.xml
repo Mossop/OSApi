@@ -1,0 +1,52 @@
+<project name="OSApi" default="build">
+
+	<property name="is${os.name}" value="true"/>
+
+	<target name="setup" description="Basic target that all must eventually use" depends="Linux,Windows">
+		<echo message="Setting up basic properties"/>
+		<tstamp/>
+		<basename property="basedir" file="${ant.file}"/>
+		<property name="sourcedir" value="${basedir}/src"/>
+		<property name="outputdir" value="${basedir}/classes"/>
+		<property name="bindir" value="${basedir}/bin"/>
+		<property name="j2version" value="1.4"/>
+		<path id="classpath">
+			<pathelement location="${outputdir}"/>
+		</path>
+	</target>
+		
+	<target name="Linux" if="isLinux" description="Sets up linux specific stuff">
+		<echo message="Setting up for Linux"/>
+		<property name="homedir" value="${user.home}"/>
+	</target>
+
+	<target name="Windows" unless="isLinux" description="Sets up windows specific stuff">
+		<echo message="Setting up for Windows"/>
+		<property name="homedir" value="${user.home}/My Documents"/>
+	</target>
+
+	<target name="fixcrlf" depends="setup" description="Fixes crlfs in source files">
+		<fixcrlf srcdir="${sourcedir}" includes="/**/*"/>
+	</target>
+
+	<target name="build" depends="setup" description="Performs the basic build">
+		<mkdir dir="${outputdir}"/>
+		<javac srcdir="${sourcedir}" includes="**/*.java" destdir="${outputdir}" source="${j2version}">
+			<classpath refid="classpath"/>
+		</javac>
+	</target>
+
+	<target name="package" depends="build" description="Packages up the code">
+		<mkdir dir="${bindir}"/>
+		<jar jarfile="${bindir}/${ant.project.name}.jar" manifest="${sourcedir}/manifest">
+			<fileset dir="${outputdir}"/>
+		</jar>
+	</target>
+
+	<target name="clean" depends="setup">
+		<delete dir="${outputdir}" failonerror="false"/>
+		<delete dir="${docsdir}" failonerror="false"/>
+		<delete file="${bindir}/${ant.project.name}.jar" failonerror="false"/>
+	</target>
+
+</project>
